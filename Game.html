@@ -18,10 +18,22 @@
 </style>
 </head>
 <body>
-<div id="hint">الجويستك للمشي • اسحب الشاشة لتدوير الكاميرا • اقرص للتقريب</div>
+<div id="hint">الجويستك للمشي • اسحب الشاشة لتدوير الكاميرا</div>
 <div id="joy"><div id="knob"></div></div>
 
+<script>
+// عرض أي خطأ على الشاشة
+window.onerror=function(m,s,l){
+  var d=document.createElement('div');
+  d.style.cssText='position:fixed;top:44px;left:8px;right:8px;background:#000d;color:#ffe066;padding:10px;font:13px monospace;direction:ltr;z-index:99;border-radius:8px';
+  d.textContent='ERROR: '+m+' (line '+l+')';
+  document.body.appendChild(d);
+};
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+window.THREE||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>');
+</script>
 <script>
 // ---------- أدوات ----------
 const rand=(()=>{let a=7;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
@@ -49,6 +61,7 @@ sun.position.set(70,110,50);
 sun.castShadow=true;
 sun.shadow.mapSize.set(2048,2048);
 Object.assign(sun.shadow.camera,{left:-110,right:110,top:110,bottom:-110,near:10,far:350});
+sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
 
 // ---------- مواد مشتركة ----------
@@ -387,4 +400,174 @@ const head=new THREE.Group();head.position.set(0,1.83,0);body.add(head);
 part(new THREE.SphereGeometry(0.22,20,16),skinM,0,0,0,head);
 [-1,1].forEach(s=>{
   part(new THREE.SphereGeometry(0.028,8,6),darkM,s*0.075,0.0,0.195,head);
-  part(new THREE.BoxGeometry(0.07,0.012,0.01),darkM,s*0.075,0.055,0.205,head
+  part(new THREE.BoxGeometry(0.07,0.012,0.01),darkM,s*0.075,0.055,0.205,head);
+});
+part(new THREE.BoxGeometry(0.07,0.015,0.01),lipM,0,-0.085,0.213,head);
+// غطاء الشعر
+head.add(new THREE.Mesh(new THREE.SphereGeometry(0.245,20,14,0,Math.PI*2,0,Math.PI*0.38),hairMD));
+head.add(new THREE.Mesh(new THREE.SphereGeometry(0.245,20,14,Math.PI,Math.PI,Math.PI*0.35,Math.PI*0.4),hairMD));
+const fringe=part(new THREE.BoxGeometry(0.3,0.08,0.06),hairM,0.03,0.115,0.2,head);fringe.rotation.z=0.25;
+// سلاسل الشعر
+function hairChain(parent,x,y,z,n,len,r0,r1,c){
+  const root=new THREE.Group();root.position.set(x,y,z);parent.add(root);
+  const segs=[];let cur=root;
+  for(let i=0;i<n;i++){
+    const s=new THREE.Group();cur.add(s);
+    const rt=r0+(r1-r0)*(i/n),rb=r0+(r1-r0)*((i+1)/n);
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,len,8),hairM);
+    m.position.y=-len/2;m.castShadow=true;s.add(m);
+    const j=new THREE.Mesh(new THREE.SphereGeometry(rb,8,6),hairM);j.position.y=-len;s.add(j);
+    const next=new THREE.Group();next.position.y=-len;s.add(next);
+    segs.push(s);cur=next;
+  }
+  return {segs,c};
+}
+const chains=[];
+[-0.16,-0.08,0,0.08,0.16].forEach((x,k)=>{
+  chains.push(hairChain(head,x,-0.04,-0.2,5,0.18-Math.abs(x)*0.4,0.075,0.045,k));
+});
+[-1,1].forEach((s,k)=>chains.push(hairChain(head,s*0.235,0.0,0.06,3,0.14,0.04,0.025,10+k)));
+// الأذرع
+function makeArm(side){
+  const p=new THREE.Group();p.position.set(side*0.34,1.52,0);body.add(p);
+  part(new THREE.BoxGeometry(0.14,0.58,0.15),jacketM,0,-0.29,0,p);
+  part(new THREE.SphereGeometry(0.07,10,8),skinM,0,-0.62,0,p);
+  return p;
+}
+const armL=makeArm(1),armR=makeArm(-1);
+// الأرجل
+function makeLeg(side){
+  const p=new THREE.Group();p.position.set(side*0.13,0.91,0);body.add(p);
+  part(new THREE.BoxGeometry(0.2,0.84,0.22),pantsM,0,-0.42,0,p);
+  part(new THREE.BoxGeometry(0.22,0.1,0.32),shoeM,0,-0.86,0.05,p);
+  return p;
+}
+const legL=makeLeg(1),legR=makeLeg(-1);
+girl.position.set(14,0,14);
+
+// ---------- الجويستك ----------
+const joy=document.getElementById('joy'),knob=document.getElementById('knob');
+let jx=0,jy=0,jid=null;
+function joyMove(e){
+  const r=joy.getBoundingClientRect();
+  let dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);
+  const m=r.width/2,d=Math.hypot(dx,dy);
+  if(d>m){dx*=m/d;dy*=m/d;}
+  knob.style.transform='translate('+dx+'px,'+dy+'px)';
+  jx=dx/m;jy=-dy/m;
+}
+joy.addEventListener('pointerdown',e=>{jid=e.pointerId;joy.setPointerCapture(e.pointerId);joyMove(e);});
+joy.addEventListener('pointermove',e=>{if(e.pointerId===jid)joyMove(e);});
+const joyEnd=e=>{if(e.pointerId===jid){jid=null;jx=jy=0;knob.style.transform='';}};
+joy.addEventListener('pointerup',joyEnd);joy.addEventListener('pointercancel',joyEnd);
+const keys={};
+addEventListener('keydown',e=>keys[e.code]=true);
+addEventListener('keyup',e=>keys[e.code]=false);
+
+// ---------- الكاميرا: تلحقها بمسافة ثابتة بدون تكبير ----------
+const RADIUS=7.5;
+let theta=Math.PI,phi=1.15;
+const camTarget=new THREE.Vector3(14,1.5,14),want=new THREE.Vector3();
+function updateCam(dt){
+  want.set(girl.position.x,1.5,girl.position.z);
+  camTarget.lerp(want,1-Math.exp(-dt*12));
+  camera.position.set(
+    camTarget.x+RADIUS*Math.sin(phi)*Math.sin(theta),
+    camTarget.y+RADIUS*Math.cos(phi),
+    camTarget.z+RADIUS*Math.sin(phi)*Math.cos(theta));
+  camera.lookAt(camTarget);
+}
+// سحب بإصبع واحد لتدوير الكاميرا فقط
+let dragId=null,lx=0,ly=0;
+cv.addEventListener('pointerdown',e=>{dragId=e.pointerId;cv.setPointerCapture(e.pointerId);lx=e.clientX;ly=e.clientY;});
+cv.addEventListener('pointermove',e=>{
+  if(e.pointerId!==dragId)return;
+  theta-=(e.clientX-lx)*0.006;
+  phi=clamp(phi-(e.clientY-ly)*0.005,0.25,1.45);
+  lx=e.clientX;ly=e.clientY;
+});
+['pointerup','pointercancel'].forEach(ev=>cv.addEventListener(ev,e=>{if(e.pointerId===dragId)dragId=null;}));
+
+// منع زوم الصفحة (ضغط مزدوج وقرص)
+let lastTap=0;
+document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTap<350)e.preventDefault();lastTap=n;},{passive:false});
+['gesturestart','gesturechange','gestureend'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault()));
+cv.addEventListener('wheel',e=>e.preventDefault(),{passive:false});
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// ---------- الحلقة ----------
+let last=performance.now(),yaw=0,spd=0,phase=0;
+function loop(now){
+  const dt=Math.min((now-last)/1000,0.05)||0.016;last=now;
+  const t=now/1000;
+
+  // الإدخال
+  let ix=jx+((keys.KeyD||keys.ArrowRight)?1:0)-((keys.KeyA||keys.ArrowLeft)?1:0);
+  let iy=jy+((keys.KeyW||keys.ArrowUp)?1:0)-((keys.KeyS||keys.ArrowDown)?1:0);
+  const im=Math.hypot(ix,iy);
+  if(im>1){ix/=im;iy/=im;}
+  const mag=Math.min(1,im);
+
+  let turn=0;
+  if(mag>0.08){
+    const fx=-Math.sin(theta),fz=-Math.cos(theta);
+    let dx=fx*iy-fz*ix,dz=fz*iy+fx*ix;
+    const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+    const sp=4.2*mag;
+    girl.position.x+=dx*sp*dt;girl.position.z+=dz*sp*dt;
+    collide(girl.position);
+    const ty=Math.atan2(dx,dz);
+    let diff=((ty-yaw+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
+    const step=diff*Math.min(1,dt*10);
+    yaw+=step;turn=step/dt;
+  }
+  girl.rotation.y=yaw;
+  const targetSpd=mag>0.08?mag:0;
+  spd+=(targetSpd-spd)*Math.min(1,dt*8);
+  phase+=dt*10.5*spd;
+
+  // حركة المشي
+  const sw=Math.sin(phase);
+  legL.rotation.x= sw*0.75*spd;
+  legR.rotation.x=-sw*0.75*spd;
+  armL.rotation.x=-sw*0.6*spd+Math.sin(t*1.5)*0.03;
+  armR.rotation.x= sw*0.6*spd-Math.sin(t*1.5)*0.03;
+  body.position.y=Math.abs(Math.cos(phase))*0.04*spd;
+  head.rotation.y=Math.sin(t*0.8)*0.05*(1-spd);
+
+  // الرياح
+  const wa=0.9+Math.sin(t*0.15)*1.2;
+  const ws=0.55+0.45*Math.sin(t*0.6)*Math.sin(t*0.23+1);
+  const wx=Math.cos(wa)*ws,wz=Math.sin(wa)*ws;
+  const cy=Math.cos(yaw),sy=Math.sin(yaw);
+  const wlx=wx*cy-wz*sy;
+  const wlz=wx*sy+wz*cy;
+  chains.forEach(ch=>{
+    ch.segs.forEach((s,i)=>{
+      const amp=0.6+ws;
+      s.rotation.x=0.07+(i===0?0.08:0)+0.09*spd-0.07*wlz+Math.sin(t*3.2+i*0.9+ch.c*0.6)*0.05*amp;
+      s.rotation.z=wlx*0.11-clamp(turn,-6,6)*0.012+Math.sin(t*2.1+i*0.7+ch.c)*0.045*amp;
+    });
+  });
+
+  // السيارات والسحب
+  cars.forEach(c=>{
+    c.pos+=c.dir*c.speed*dt;
+    if(Math.abs(c.pos)>78)c.pos=-c.dir*78;
+    if(c.axis==='x'){c.g.position.set(c.pos,0,c.line);c.g.rotation.y=c.dir>0?Math.PI/2:-Math.PI/2;}
+    else{c.g.position.set(c.line,0,c.pos);c.g.rotation.y=c.dir>0?0:Math.PI;}
+  });
+  clouds.forEach(c=>{c.position.x+=dt*1.5;if(c.position.x>220)c.position.x=-220;});
+
+  updateCam(dt);
+  renderer.render(scene,camera);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
